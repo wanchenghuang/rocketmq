@@ -110,6 +110,7 @@ public class ScheduleMessageService extends ConfigManager {
         return storeTimestamp + 1000;
     }
 
+    //启动定时任务持久化延迟队列进度存储
     public void start() {
         if (started.compareAndSet(false, true)) {
             this.timer = new Timer("ScheduleMessageTimerThread", true);
@@ -195,7 +196,7 @@ public class ScheduleMessageService extends ConfigManager {
         timeUnitTable.put("m", 1000L * 60);
         timeUnitTable.put("h", 1000L * 60 * 60);
         timeUnitTable.put("d", 1000L * 60 * 60 * 24);
-
+        //${ROCKETMQ_HOME}/store/config/delayOffset.json:{"offsetTable":{13:0,6:0,12:0;;;}}
         String levelString = this.defaultMessageStore.getMessageStoreConfig().getMessageDelayLevel();
         try {
             String[] levelArray = levelString.split(" ");

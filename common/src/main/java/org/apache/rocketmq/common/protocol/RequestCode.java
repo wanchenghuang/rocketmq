@@ -19,8 +19,9 @@ package org.apache.rocketmq.common.protocol;
 
 public class RequestCode {
 
+    //发送消息
     public static final int SEND_MESSAGE = 10;
-
+    //拉取消息
     public static final int PULL_MESSAGE = 11;
 
     public static final int QUERY_MESSAGE = 12;
@@ -51,7 +52,7 @@ public class RequestCode {
     public static final int HEART_BEAT = 34;
 
     public static final int UNREGISTER_CLIENT = 35;
-
+    //消息确认，MQClientAPIImpl#consumerSendMessageBack
     public static final int CONSUMER_SEND_MSG_BACK = 36;
 
     public static final int END_TRANSACTION = 37;
@@ -85,7 +86,7 @@ public class RequestCode {
     public static final int GET_KV_CONFIG = 101;
 
     public static final int DELETE_KV_CONFIG = 102;
-
+    //注册broker信息;RouteInfoManager#registerBroker
     public static final int REGISTER_BROKER = 103;
 
     public static final int UNREGISTER_BROKER = 104;
