@@ -140,6 +140,26 @@ public class PullAPIWrapper {
         }
     }
 
+    /**
+     *
+     * @param mq 消息消费队列
+     * @param subExpression
+     * @param expressionType
+     * @param subVersion
+     * @param offset
+     * @param maxNums
+     * @param sysFlag
+     * @param commitOffset
+     * @param brokerSuspendMaxTimeMillis
+     * @param timeoutMillis
+     * @param communicationMode
+     * @param pullCallback
+     * @return
+     * @throws MQClientException
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     public PullResult pullKernelImpl(
         final MessageQueue mq,
         final String subExpression,
@@ -193,7 +213,9 @@ public class PullAPIWrapper {
             requestHeader.setExpressionType(expressionType);
 
             String brokerAddr = findBrokerResult.getBrokerAddr();
+            //消息过滤模式为类过滤模式，将拉取消息服务器地址由原来的broker地址转换为该broker服务器所对应的filterServer
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
+                //转换
                 brokerAddr = computePullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
 
@@ -223,14 +245,27 @@ public class PullAPIWrapper {
         return MixAll.MASTER_ID;
     }
 
+    /**
+     *将拉取消息服务器地址由原来的broker转换为其对应的filterServer
+     * @param topic 主题
+     * @param brokerAddr broker地址
+     * @return
+     * @throws MQClientException
+     */
     private String computePullFromWhichFilterServer(final String topic, final String brokerAddr)
         throws MQClientException {
+        //获取该主题的路由信息
         ConcurrentMap<String, TopicRouteData> topicRouteTable = this.mQClientFactory.getTopicRouteTable();
         if (topicRouteTable != null) {
             TopicRouteData topicRouteData = topicRouteTable.get(topic);
+            //从路由信息中获取broker对应的filterServer列表
             List<String> list = topicRouteData.getFilterServerTable().get(brokerAddr);
 
             if (list != null && !list.isEmpty()) {
+                //如果不为空则随机从FilterServer 列表中选择一个FilterServer ，发送拉取消息请求至相
+                //应的FilterServer上，由于FilterServer使用DefaultMQPullConsumer消费者根据消息消费
+                //者的拉取任务将拉取请求转发给Broker ，然后对返回的消息执行消息过滤逻辑，将匹配的
+                //消息返回给消息消费者
                 return list.get(randomNum() % list.size());
             }
         }

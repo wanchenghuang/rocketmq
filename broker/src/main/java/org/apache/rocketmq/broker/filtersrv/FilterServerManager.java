@@ -35,6 +35,13 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
+/**
+ * FilterServer 与Broker 通过心跳维持FilterServer在Broker端的注册(broker知道所有的filterServer)，同样在Broker每
+ * 隔10s扫描一下该注册表，如果30s 内未收到FilterServer的注册信息，将关闭Broker与
+ * FilterServer的连接。Broker 为了避免Broker 端FilterServer 的异常退出导致FilterServer 进
+ * 程越来越少， 同样提供一个定时任务每30s 检测一下当前存活的FilterServer 进程的个数，
+ * 如果当前存活的FilterServer进程个数小于配置的数量，则自动创建一个FilterServer 进程。
+ */
 public class FilterServerManager {
 
     public static final long FILTER_SERVER_MAX_IDLE_TIME_MILLS = 30000;
@@ -73,6 +80,7 @@ public class FilterServerManager {
         }
     }
 
+    //构建shell命令
     private String buildStartCommand() {
         String config = "";
         if (BrokerStartup.configFile != null) {
@@ -145,7 +153,9 @@ public class FilterServerManager {
     }
 
     static class FilterServerInfo {
+        //filter服务器地址
         private String filterServerAddr;
+        //filterServer上次发送心跳包的时间
         private long lastUpdateTimestamp;
 
         public String getFilterServerAddr() {
