@@ -1199,6 +1199,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
     }
 
+    /**
+     * 事务消息提交
+     * 第一个阶段：将事务主题更改为事务主题RMQ_SYS_TRANS_HALF TOPIC、消费队列变更为0，然后消息按照普通消息存储在commitlog文件
+     * 进而转发到RMQ SYS_ TRANS_HALF_TOPIC 主题对应的消息消费队列
+     * 第二个阶段：提交或者回滚
+     * @param msg
+     * @param localTransactionExecuter
+     * @param arg
+     * @return
+     * @throws MQClientException
+     */
     public TransactionSendResult sendMessageInTransaction(final Message msg,
         final LocalTransactionExecuter localTransactionExecuter, final Object arg)
         throws MQClientException {
@@ -1215,7 +1226,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         Validators.checkMessage(msg, this.defaultMQProducer);
 
         SendResult sendResult = null;
+        //添加是否为事务消息： TRAN_MSG，prepare消息
         MessageAccessor.putProperty(msg, MessageConst.PROPERTY_TRANSACTION_PREPARED, "true");
+        //添加消费组PGROUP属性
+        //设置消息生产者组的目的是在查询事务消息本地事务状态时，从该生产者组中随机选择一个消息生产者即可，然后通过同步调用方式向RocketMQ 发送消息
         MessageAccessor.putProperty(msg, MessageConst.PROPERTY_PRODUCER_GROUP, this.defaultMQProducer.getProducerGroup());
         try {
             sendResult = this.send(msg);
@@ -1223,6 +1237,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             throw new MQClientException("send message Exception", e);
         }
 
+        //事务消息状态为unknown
         LocalTransactionState localTransactionState = LocalTransactionState.UNKNOW;
         Throwable localException = null;
         switch (sendResult.getSendStatus()) {
@@ -1239,6 +1254,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         localTransactionState = localTransactionExecuter.executeLocalTransactionBranch(msg, arg);
                     } else if (transactionListener != null) {
                         log.debug("Used new transaction API");
+                        /**消息发送成功，调用TransactionListener#executeLocalTransaction 方法，该
+                         方法的职责是记录事务消息的本地事务状态， 例如可以通过将消息唯一ID 存储在数据中，
+                         并且该方法与业务代码处于同一个事务，与业务事务要么一起成功，要么一起失败。这里
+                         是事务消息设计的关键理念之一， 为后续的事务状态回查提供唯一依据。**/
                         localTransactionState = transactionListener.executeLocalTransaction(msg, arg);
                     }
                     if (null == localTransactionState) {
@@ -1259,6 +1278,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             case FLUSH_DISK_TIMEOUT:
             case FLUSH_SLAVE_TIMEOUT:
             case SLAVE_NOT_AVAILABLE:
+                //消息发送失败，设置本次事务状态为ROLLBACK_MESSAGE
                 localTransactionState = LocalTransactionState.ROLLBACK_MESSAGE;
                 break;
             default:
@@ -1266,6 +1286,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
 
         try {
+            /**由于this.endTransaction 的执行,其业务事务并没有提交,故在使用事务消息
+             TransactionListener#executeLocalTransaction 方法除了记录事务消息状态后,应该返回LocalTransaction.UNKNOW，
+             事务消息的提交与回滚通过事务消息状态回查再决定是否提交或回滚**/
             this.endTransaction(sendResult, localTransactionState, localException);
         } catch (Exception e) {
             log.warn("local transaction execute " + localTransactionState + ", but end broker transaction failed", e);
@@ -1289,6 +1312,21 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         return send(msg, this.defaultMQProducer.getSendMsgTimeout());
     }
 
+    /**
+     * 事务消息第二阶段：提交或者回滚
+     * 根据消息所属的消息队列获取Broker的IP与端口信息，然后发送结束事务命令，其关
+     * 键就是根据本地执行事务的状态分别发送提交、回滚或“不作为”的命令。Broker 服务端
+     * 的结束事务处理器为： EndTransactionProcessor#processRequest
+     *
+     * @param sendResult
+     * @param localTransactionState
+     * @param localException
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     * @throws UnknownHostException
+     * 
+     */
     public void endTransaction(
         final SendResult sendResult,
         final LocalTransactionState localTransactionState,

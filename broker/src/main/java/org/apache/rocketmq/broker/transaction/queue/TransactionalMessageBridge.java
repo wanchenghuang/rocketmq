@@ -50,6 +50,15 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 这里是事务消息与非事务消息发送流程的主要区别,如果是事务消息则备份消息的原
+ * 主题与原消息消费队列,然后将主题变更为RMQ_SYS_TRANS_HALF TOPIC,消费队列
+ * 变更为0,然后消息按照普通消息存储在commitlog文件进而转发到RMQ_SYS_TRANS_HALF_TOPIC
+ * 主题对应的消息消费队列。也就是说，事务消息在未提交之前并不会存入
+ * 消息原有主题,自然也不会被消费者消费。既然变更了主题,RocketMQ 通常会采用定时
+ * 任务（单独的线程）去消费该主题,然后将该消息在满足特定条件下恢复消息主题，进而
+ * 被消费者消费.这种实现与RocketMQ定时消息的处理过程如出一辙。
+ */
 public class TransactionalMessageBridge {
     private static final InternalLogger LOGGER = InnerLoggerFactory.getLogger(LoggerName.TRANSACTION_LOGGER_NAME);
 

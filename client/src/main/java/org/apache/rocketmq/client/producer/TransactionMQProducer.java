@@ -66,16 +66,21 @@ public class TransactionMQProducer extends DefaultMQProducer {
     /**
      * This method will be removed in the version 5.0.0, method <code>sendMessageInTransaction(Message,Object)</code>}
      * is recommended.
+     *
+     * 发送事务消息
+     * RocketMQ 基于两阶段协议发送与提交回滚消息
      */
     @Override
     @Deprecated
     public TransactionSendResult sendMessageInTransaction(final Message msg,
         final LocalTransactionExecuter tranExecuter, final Object arg) throws MQClientException {
+        //如果事务监听器为空，直接返回异常
         if (null == this.transactionCheckListener) {
             throw new MQClientException("localTransactionBranchCheckListener is null", null);
         }
 
         msg.setTopic(NamespaceUtil.wrapNamespace(this.getNamespace(), msg.getTopic()));
+        //最终调用DefaultMQProducerImpl#sendMessageInTransaction方法
         return this.defaultMQProducerImpl.sendMessageInTransaction(msg, tranExecuter, arg);
     }
 
